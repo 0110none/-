@@ -5,7 +5,7 @@ import time
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QTabWidget, QScrollArea, QGridLayout,
                              QMessageBox, QFileDialog, QComboBox, QSlider, QSpinBox,
-                             QFrame, QGroupBox)
+                             QFrame, QGroupBox, QSizePolicy)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon
 from loguru import logger
@@ -134,6 +134,7 @@ class MainWindow(QMainWindow):
         self.camera_container = QWidget()
         self.camera_grid = QGridLayout(self.camera_container)
         self.camera_grid.setSpacing(10)
+        self.camera_grid.setContentsMargins(0, 0, 0, 0)
         scroll.setWidget(self.camera_container)
 
         layout = QVBoxLayout(monitor_tab)
@@ -143,28 +144,62 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
         layout.addWidget(scroll)
 
-        # 为每个摄像头添加显示区域
+        # 摄像头显示
+        self.max_display_cameras = 4
         self.camera_labels = {}
-        for cam_id in self.camera_manager.cameras:
-            card = QFrame()
-            card.setObjectName("cameraCard")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(12, 12, 12, 12)
-            card_layout.setSpacing(8)
+        self.build_camera_displays()
 
-            header = QLabel(self.camera_manager.cameras[cam_id].name)
-            header.setAlignment(Qt.AlignCenter)
-            header.setObjectName("cameraTitle")
-            card_layout.addWidget(header)
+    def build_camera_displays(self):
+        """根据摄像头数量创建（或更新）显示区域，最多 4 个"""
+        # 清空旧控件
+        for i in reversed(range(self.camera_grid.count())):
+            item = self.camera_grid.itemAt(i)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+
+        self.camera_labels.clear()
+
+        camera_ids = [
+            cam_id for cam_id, cam in self.camera_manager.cameras.items() if cam.enabled
+        ]
+        if not camera_ids:
+            camera_ids = list(self.camera_manager.cameras.keys())
+        display_ids = camera_ids[:self.max_display_cameras]
+
+        if not display_ids:
+            placeholder = QLabel("未配置摄像头")
+            placeholder.setAlignment(Qt.AlignCenter)
+            self.camera_grid.addWidget(placeholder, 0, 0)
+            return
+
+        columns = 2 if len(display_ids) > 1 else 1
+
+        for index, cam_id in enumerate(display_ids):
+            frame = QFrame()
+            frame.setObjectName("cameraDisplay")
+            frame_layout = QVBoxLayout(frame)
+            frame_layout.setContentsMargins(0, 0, 0, 0)
+            frame_layout.setSpacing(0)
 
             label = QLabel()
             label.setAlignment(Qt.AlignCenter)
-            label.setMinimumSize(360, 220)
+            label.setMinimumSize(240, 180)
+            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             label.setObjectName("cameraFeed")
-            self.camera_labels[cam_id] = label
-            card_layout.addWidget(label)
+            frame_layout.addWidget(label)
 
-            self.camera_grid.addWidget(card, (cam_id // 2), (cam_id % 2))
+            overlay = QLabel(self.camera_manager.cameras[cam_id].name, label)
+            overlay.setObjectName("cameraOverlay")
+            overlay.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+            overlay.setMargin(8)
+            overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+            self.camera_labels[cam_id] = label
+
+            row = index // columns
+            col = index % columns
+            self.camera_grid.addWidget(frame, row, col)
 
     def setup_controls_tab(self):
         """控制界面：用于调节识别阈值、处理间隔、摄像头启停等"""
@@ -418,10 +453,12 @@ class MainWindow(QMainWindow):
         try:
             if frame is None:
                 return
+            target_label = self.camera_labels.get(cam_id)
+            if target_label is None:
+                return
             pixmap = numpy_to_pixmap(frame)
             if pixmap is None:
                 return
-            target_label = self.camera_labels[cam_id]
             scaled = pixmap.scaled(
                 target_label.size(),
                 Qt.KeepAspectRatio,
@@ -492,13 +529,18 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
                 padding: 8px 0;
             }
-            QLabel#cameraTitle {
-                font-size: 16px;
-                font-weight: 600;
-            }
             QLabel#cameraFeed {
-                background-color: #151724;
-                border-radius: 8px;
+                background-color: #0f1120;
+                border: 1px solid #2b2f44;
+                border-radius: 12px;
+            }
+            QLabel#cameraOverlay {
+                font-size: 14px;
+                font-weight: 600;
+                color: #ffffff;
+                background-color: rgba(0, 0, 0, 0.45);
+                border-radius: 6px;
+                padding: 4px 10px;
             }
             QTabWidget::pane {
                 border: 1px solid #2b2f44;
@@ -543,10 +585,7 @@ class MainWindow(QMainWindow):
             QScrollArea {
                 border: none;
             }
-            QFrame#cameraCard {
-                background-color: #24283d;
-                border-radius: 12px;
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                
+            QFrame#cameraDisplay {
+                background-color: transparent;
             }
         """)

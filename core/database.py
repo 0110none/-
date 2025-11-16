@@ -161,6 +161,18 @@ class FaceDatabase:
             logger.error(f"查询人脸日志失败: {e}")
             return []
 
+    def clear_face_logs(self) -> bool:
+        """清空人脸识别日志表"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM face_logs")
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"清空历史记录失败: {e}")
+            return False
+
     def add_known_face(self, name: str, embedding: bytes, image_path: str) -> bool:
         """添加新的已知人脸（特征 + 图像路径）"""
         try:
