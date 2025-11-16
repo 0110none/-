@@ -1,12 +1,19 @@
-// Theme Toggle Functionality
+// ====================
+// 主题切换与交互脚本
+// --------------------
+// 本文件负责着陆页的交互动画、主题切换、滚动效果等
+// 行为逻辑，所有注释均为中文以方便团队协作阅读。
+// ====================
+
+// 主题切换按钮与文档主体引用
 const themeToggle = document.getElementById('themeToggle');
 const body = document.body;
 
-// Check for saved theme preference or default to 'dark'
+// 读取本地缓存的主题偏好，默认为暗色模式
 const currentTheme = localStorage.getItem('theme') || 'dark';
 body.classList.add(currentTheme);
 
-// Update theme toggle icon
+// 根据当前主题更新按钮图标（太阳/⽉亮）
 function updateThemeIcon() {
     const icon = themeToggle.querySelector('i');
     if (body.classList.contains('dark')) {
@@ -16,6 +23,7 @@ function updateThemeIcon() {
     }
 }
 
+// 页面加载后立即同步图标状态
 updateThemeIcon();
 
 themeToggle.addEventListener('click', () => {
@@ -31,7 +39,7 @@ themeToggle.addEventListener('click', () => {
     updateThemeIcon();
 });
 
-// Smooth scrolling for navigation links
+// 站内导航平滑滚动
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
@@ -45,7 +53,7 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
-// Intersection Observer for feature cards animation
+// 监听 Feature 卡片是否进入视窗，以便触发渐进动画
 const observerOptions = {
     threshold: 0.1,
     rootMargin: '0px 0px -50px 0px'
@@ -63,12 +71,12 @@ const observer = new IntersectionObserver((entries) => {
     });
 }, observerOptions);
 
-// Observe all feature cards
+// 为所有卡片注册观测器
 document.querySelectorAll('.feature-card').forEach(card => {
     observer.observe(card);
 });
 
-// Header background on scroll
+// 根据滚动距离调整头部背景透明度
 window.addEventListener('scroll', () => {
     const header = document.querySelector('.header');
     if (window.scrollY > 100) {
@@ -78,7 +86,7 @@ window.addEventListener('scroll', () => {
     }
 });
 
-// Add loading animation to buttons
+// 为按钮添加点击涟漪效果
 document.querySelectorAll('.btn').forEach(btn => {
     btn.addEventListener('click', function(e) {
         // Create ripple effect
@@ -101,7 +109,7 @@ document.querySelectorAll('.btn').forEach(btn => {
     });
 });
 
-// Add ripple effect styles
+// 动态插入涟漪效果的样式定义
 const style = document.createElement('style');
 style.textContent = `
     .btn {
@@ -127,7 +135,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Parallax effect for hero background
+// Hero 背景视差效果
 window.addEventListener('scroll', () => {
     const scrolled = window.pageYOffset;
     const parallax = document.querySelector('.hero-bg');
@@ -137,7 +145,7 @@ window.addEventListener('scroll', () => {
     }
 });
 
-// Add typing effect to hero title (optional)
+// 打字机标题效果（按需启用）
 function typeWriter(element, text, speed = 100) {
     let i = 0;
     element.innerHTML = '';
@@ -153,7 +161,7 @@ function typeWriter(element, text, speed = 100) {
     type();
 }
 
-// Initialize typing effect when page loads
+// 页面加载完成后再尝试初始化打字机效果
 window.addEventListener('load', () => {
     const heroTitle = document.querySelector('.hero-title-gradient');
     if (heroTitle) {
@@ -163,7 +171,7 @@ window.addEventListener('load', () => {
     }
 });
 
-// Add scroll progress indicator
+// 创建滚动进度条，提示用户当前阅读位置
 const scrollProgress = document.createElement('div');
 scrollProgress.style.cssText = `
     position: fixed;
@@ -177,6 +185,7 @@ scrollProgress.style.cssText = `
 `;
 document.body.appendChild(scrollProgress);
 
+// 监听滚动事件并更新进度条宽度
 window.addEventListener('scroll', () => {
     const scrollTop = window.pageYOffset;
     const docHeight = document.body.offsetHeight - window.innerHeight;
