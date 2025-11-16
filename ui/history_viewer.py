@@ -29,12 +29,51 @@ class HistoryViewer(QWidget):
         self.config = config
         self.current_entry = None     # 当前选中的记录项
         self.current_entries = []     # 当前筛选条件下的所有记录
+        self.export_dir = self._resolve_export_directory()
 
         # 初始化界面与数据
         self.setup_ui()
         self.load_camera_list()
         self.load_face_list()
         self.refresh_history()
+
+    def _resolve_export_directory(self) -> Path:
+        """根据配置或默认值创建导出目录"""
+        app_config = self.config.get('app', {}) if isinstance(self.config, dict) else {}
+        export_dir = app_config.get('export_dir')
+        if export_dir:
+            export_path = Path(export_dir).expanduser()
+        else:
+            export_path = Path.home() / 'history_exports'
+
+        try:
+            export_path.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            logger.warning(f"创建导出目录失败，使用用户目录: {exc}")
+            export_path = Path.home()
+
+        return export_path
+
+    def _current_filter_conditions(self):
+        """返回当前筛选条件对应的查询参数"""
+        start_date = self.start_date.date().toPyDate()
+        end_date = self.end_date.date().toPyDate() + timedelta(days=1)
+
+        start_timestamp = datetime.combine(start_date, datetime.min.time()).timestamp()
+        end_timestamp = datetime.combine(end_date, datetime.min.time()).timestamp()
+
+        return {
+            'camera_id': self.camera_combo.currentData(),
+            'face_name': self.face_combo.currentData(),
+            'start_time': start_timestamp,
+            'end_time': end_timestamp
+        }
+
+    def update_export_path_label(self):
+        if hasattr(self, 'export_path_label'):
+            display_path = str(self.export_dir)
+            self.export_path_label.setText(display_path)
+            self.export_path_label.setToolTip(display_path)
 
     def setup_ui(self):
         """初始化界面组件：筛选区 + 历史列表 + 详情面板"""
@@ -95,6 +134,19 @@ class HistoryViewer(QWidget):
         filter_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         main_layout.addLayout(filter_layout)
 
+        # 导出目录选择
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("保存位置："))
+        self.export_path_label = QLabel()
+        self.export_path_label.setObjectName("exportPathLabel")
+        self.export_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        path_layout.addWidget(self.export_path_label, 1)
+
+        self.choose_dir_btn = QPushButton("选择保存位置")
+        self.choose_dir_btn.clicked.connect(self.choose_export_directory)
+        path_layout.addWidget(self.choose_dir_btn)
+        main_layout.addLayout(path_layout)
+
         # --- 主体区：历史列表 + 详情面板 ---
         splitter = QSplitter(Qt.Horizontal)
 
@@ -131,6 +183,7 @@ class HistoryViewer(QWidget):
         splitter.setStretchFactor(1, 2)
         main_layout.addWidget(splitter)
         self.setLayout(main_layout)
+        self.update_export_path_label()
 
     def load_camera_list(self):
         """从配置文件加载摄像头列表到下拉框"""
@@ -160,22 +213,15 @@ class HistoryViewer(QWidget):
         """根据筛选条件刷新历史记录列表"""
         try:
             # 获取筛选条件
-            start_date = self.start_date.date().toPyDate()
-            end_date = self.end_date.date().toPyDate() + timedelta(days=1)  # 包含最后一天
-
-            start_timestamp = datetime.combine(start_date, datetime.min.time()).timestamp()
-            end_timestamp = datetime.combine(end_date, datetime.min.time()).timestamp()
-
-            camera_id = self.camera_combo.currentData()
-            face_name = self.face_combo.currentData()
+            filters = self._current_filter_conditions()
 
             # 从数据库获取符合条件的记录
             entries = self.database.get_face_logs(
                 limit=1000,
-                camera_id=camera_id,
-                face_name=face_name,
-                start_time=start_timestamp,
-                end_time=end_timestamp
+                camera_id=filters['camera_id'],
+                face_name=filters['face_name'],
+                start_time=filters['start_time'],
+                end_time=filters['end_time']
             )
 
             # 显示到列表中
@@ -200,9 +246,7 @@ class HistoryViewer(QWidget):
             QMessageBox.information(self, "无记录", "没有可导出的历史记录。")
             return
 
-        app_config = self.config.get('app', {}) if isinstance(self.config, dict) else {}
-        export_dir = app_config.get('export_dir')
-        default_path = Path(export_dir).expanduser() if export_dir else Path.home()
+        default_path = self.export_dir
         default_path.mkdir(parents=True, exist_ok=True)
         filename = default_path / f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
@@ -239,26 +283,56 @@ class HistoryViewer(QWidget):
             QMessageBox.critical(self, "错误", f"导出历史记录失败：{str(e)}")
 
     def clear_history(self):
-        """清空数据库中的历史记录"""
-        reply = QMessageBox.question(
-            self,
-            "确认清除",
-            "确定要清除所有历史记录吗？此操作不可恢复。",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply != QMessageBox.Yes:
+        """提供清除筛选记录或全部记录的能力"""
+        if not self.current_entries:
+            QMessageBox.information(self, "无记录", "当前没有可清除的记录。")
+            return
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("确认清除")
+        msg_box.setText("请选择要清除的记录范围：")
+        filtered_btn = msg_box.addButton("清除筛选结果", QMessageBox.ActionRole)
+        all_btn = msg_box.addButton("清除全部记录", QMessageBox.DestructiveRole)
+        cancel_btn = msg_box.addButton(QMessageBox.Cancel)
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.exec_()
+
+        clicked = msg_box.clickedButton()
+        if clicked == cancel_btn:
             return
 
         try:
-            if self.database.clear_face_logs():
-                QMessageBox.information(self, "已清除", "历史记录已清空。")
-                self.refresh_history()
+            deleted = 0
+            if clicked == filtered_btn:
+                filters = self._current_filter_conditions()
+                deleted = self.database.delete_face_logs(
+                    camera_id=filters['camera_id'],
+                    face_name=filters['face_name'],
+                    start_time=filters['start_time'],
+                    end_time=filters['end_time']
+                )
+            elif clicked == all_btn:
+                deleted = self.database.delete_face_logs()
+
+            if deleted > 0:
+                QMessageBox.information(self, "已清除", f"成功清除 {deleted} 条历史记录。")
             else:
-                QMessageBox.warning(self, "清除失败", "未能清除历史记录，请稍后重试。")
+                QMessageBox.information(self, "无记录", "没有符合条件的记录被删除。")
+            self.refresh_history()
         except Exception as e:
             logger.error(f"清除历史记录失败: {e}")
             QMessageBox.critical(self, "错误", "清除历史记录时出现问题。")
+
+    def choose_export_directory(self):
+        """允许用户自定义 CSV 保存位置"""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "选择导出目录",
+            str(self.export_dir)
+        )
+        if directory:
+            self.export_dir = Path(directory)
+            self.update_export_path_label()
 
     def on_history_item_selected(self, current, previous):
         """当用户选择一条历史记录时，显示详细信息"""

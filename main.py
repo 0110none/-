@@ -36,6 +36,7 @@ def load_config(config_path: str) -> dict:
         Path(config['app']['screenshot_dir']).mkdir(parents=True, exist_ok=True)
         Path(config['app']['known_faces_dir']).mkdir(parents=True, exist_ok=True)
         Path(config['app']['log_dir']).mkdir(parents=True, exist_ok=True)
+        Path(config['app'].get('export_dir', 'data/exports')).mkdir(parents=True, exist_ok=True)
 
         return config
     except Exception as e:
