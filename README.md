@@ -30,7 +30,7 @@ A robust real-time face tracking system with multi-camera support, facial recogn
 ### User Interface
 - 🖥️ **Live Monitoring Dashboard**: View all camera feeds in real-time
 - 👤 **Face Management**: Add/remove known faces with photo uploads
-- ⏱️ **History Viewer**: Filter events by date, camera, or individual
+- ⏱️ **History Viewer**: Filter events by date, camera, or individual, export CSV reports, and purge unwanted logs
 
 ## 🛠️ Technical Stack
 
@@ -100,6 +100,7 @@ app:
   database_path: "data/database.db"
   alert_sound: "assets/alert.wav"
   log_dir: "logs"
+  export_dir: "data/exports"
 recognition:
   detection_threshold: 0.5
   recognition_threshold: 0.6
@@ -160,6 +161,12 @@ Want to dive deeper into how this system works, including architecture insights 
 - Set minimum confidence threshold (0.5-1.0)
 - Enable/disable screenshot capture
 - View age and gender next to each recognized face
+
+### History Viewer
+1. Open the "History" tab to browse previously logged recognition events
+2. Use the date, camera, and face filters to narrow down the list
+3. Click "选择保存位置" to pick a folder for CSV exports, then use "导出记录" to save the filtered list
+4. Select "清除历史" to delete either the filtered subset or the entire database of records
 
 ## 🚀 Performance Tips
 1. For RTSP Streams:

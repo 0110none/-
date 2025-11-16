@@ -173,6 +173,42 @@ class FaceDatabase:
             logger.error(f"清空历史记录失败: {e}")
             return False
 
+    def delete_face_logs(self,
+                         camera_id: Optional[int] = None,
+                         face_name: Optional[str] = None,
+                         start_time: Optional[float] = None,
+                         end_time: Optional[float] = None) -> int:
+        """按条件删除人脸识别日志，返回被删除的记录数"""
+        try:
+            query = "DELETE FROM face_logs"
+            params = []
+            conditions = []
+
+            if camera_id is not None:
+                conditions.append("camera_id = ?")
+                params.append(camera_id)
+            if face_name is not None:
+                conditions.append("face_name = ?")
+                params.append(face_name)
+            if start_time is not None:
+                conditions.append("timestamp >= ?")
+                params.append(float(start_time))
+            if end_time is not None:
+                conditions.append("timestamp <= ?")
+                params.append(float(end_time))
+
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                return cursor.rowcount
+        except Exception as e:
+            logger.error(f"删除历史记录失败: {e}")
+            return 0
+
     def add_known_face(self, name: str, embedding: bytes, image_path: str) -> bool:
         """添加新的已知人脸（特征 + 图像路径）"""
         try:

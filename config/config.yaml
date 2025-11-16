@@ -9,6 +9,7 @@ app:
   unknown_alert_sound: "assets/alert_unknown.wav"
   logo: "assets/logo.png"
   log_dir: "logs"
+  export_dir: "data/exports"
 
 recognition:
   detection_threshold: 0.5
