@@ -3,11 +3,12 @@
 from pathlib import Path
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton,
                              QLabel, QDateEdit, QComboBox, QSpacerItem, QSizePolicy,
-                             QSplitter, QFrame, QMessageBox, QDialog)
+                             QSplitter, QFrame, QMessageBox, QDialog, QFileDialog)
 from PyQt5.QtCore import Qt, QDate
 from loguru import logger
 from datetime import datetime, timedelta
 import cv2
+import csv
 
 from core.database import FaceDatabase, FaceLogEntry
 from core.utils import numpy_to_pixmap
@@ -27,6 +28,7 @@ class HistoryViewer(QWidget):
         self.database = database      # 数据库对象（FaceDatabase 实例）
         self.config = config
         self.current_entry = None     # 当前选中的记录项
+        self.current_entries = []     # 当前筛选条件下的所有记录
 
         # 初始化界面与数据
         self.setup_ui()
@@ -39,7 +41,9 @@ class HistoryViewer(QWidget):
         main_layout = QVBoxLayout()
 
         # --- 筛选条件区 ---
-        filter_layout = QHBoxLayout()
+        filter_layout = QVBoxLayout()
+
+        criteria_row = QHBoxLayout()
 
         # 时间范围筛选
         date_layout = QVBoxLayout()
@@ -59,7 +63,7 @@ class HistoryViewer(QWidget):
         date_range_layout.addWidget(self.end_date)
 
         date_layout.addLayout(date_range_layout)
-        filter_layout.addLayout(date_layout)
+        criteria_row.addLayout(date_layout)
 
         # 摄像头筛选
         camera_layout = QVBoxLayout()
@@ -67,7 +71,7 @@ class HistoryViewer(QWidget):
         self.camera_combo = QComboBox()
         self.camera_combo.addItem("全部摄像头", None)
         camera_layout.addWidget(self.camera_combo)
-        filter_layout.addLayout(camera_layout)
+        criteria_row.addLayout(camera_layout)
 
         # 人脸筛选
         face_layout = QVBoxLayout()
@@ -75,14 +79,41 @@ class HistoryViewer(QWidget):
         self.face_combo = QComboBox()
         self.face_combo.addItem("全部人脸", None)
         face_layout.addWidget(self.face_combo)
-        filter_layout.addLayout(face_layout)
+        criteria_row.addLayout(face_layout)
 
-        # 刷新按钮
+        # 操作按钮放置在筛选区右侧，竖排显示，避免被忽视
+        actions_column = QVBoxLayout()
+        actions_column.addWidget(QLabel("操作："))
+
+        buttons_column = QVBoxLayout()
+        buttons_column.setSpacing(6)
+
+        def _style_action_button(button: QPushButton):
+            button.setMinimumWidth(110)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
         self.refresh_btn = QPushButton("刷新")
+        _style_action_button(self.refresh_btn)
         self.refresh_btn.clicked.connect(self.refresh_history)
-        filter_layout.addWidget(self.refresh_btn)
+        buttons_column.addWidget(self.refresh_btn)
 
-        filter_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.export_btn = QPushButton("导出记录")
+        _style_action_button(self.export_btn)
+        self.export_btn.clicked.connect(self.export_history)
+        buttons_column.addWidget(self.export_btn)
+
+        self.clear_btn = QPushButton("清除历史")
+        _style_action_button(self.clear_btn)
+        self.clear_btn.clicked.connect(self.clear_history)
+        buttons_column.addWidget(self.clear_btn)
+
+        actions_column.addLayout(buttons_column)
+        actions_column.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
+        criteria_row.addLayout(actions_column)
+        criteria_row.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        filter_layout.addLayout(criteria_row)
+
         main_layout.addLayout(filter_layout)
 
         # --- 主体区：历史列表 + 详情面板 ---
@@ -170,6 +201,7 @@ class HistoryViewer(QWidget):
 
             # 显示到列表中
             self.history_list.clear()
+            self.current_entries = entries
             for entry in entries:
                 try:
                     timestamp = float(entry.timestamp)
@@ -182,6 +214,72 @@ class HistoryViewer(QWidget):
                     continue
         except Exception as e:
             logger.error(f"刷新历史记录失败: {e}")
+
+    def export_history(self):
+        """将当前列表导出为 CSV"""
+        if not self.current_entries:
+            QMessageBox.information(self, "无记录", "没有可导出的历史记录。")
+            return
+
+        app_config = self.config.get('app', {}) if isinstance(self.config, dict) else {}
+        export_dir = app_config.get('export_dir')
+        default_path = Path(export_dir).expanduser() if export_dir else Path.home()
+        default_path.mkdir(parents=True, exist_ok=True)
+        filename = default_path / f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出历史记录",
+            str(filename),
+            "CSV 文件 (*.csv)"
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([
+                    'ID', '时间', '摄像头', '摄像头ID', '人脸', '年龄', '性别', '置信度', '截图路径'
+                ])
+                for entry in self.current_entries:
+                    writer.writerow([
+                        entry.id,
+                        datetime.fromtimestamp(float(entry.timestamp)).strftime('%Y-%m-%d %H:%M:%S'),
+                        entry.camera_name,
+                        entry.camera_id,
+                        entry.face_name,
+                        entry.age if entry.age is not None else '',
+                        entry.gender if entry.gender else '',
+                        f"{float(entry.confidence):.2f}",
+                        entry.screenshot_path or ''
+                    ])
+            QMessageBox.information(self, "导出成功", f"历史记录已导出到：\n{path}")
+        except Exception as e:
+            logger.error(f"导出历史记录失败: {e}")
+            QMessageBox.critical(self, "错误", f"导出历史记录失败：{str(e)}")
+
+    def clear_history(self):
+        """清空数据库中的历史记录"""
+        reply = QMessageBox.question(
+            self,
+            "确认清除",
+            "确定要清除所有历史记录吗？此操作不可恢复。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            if self.database.clear_face_logs():
+                QMessageBox.information(self, "已清除", "历史记录已清空。")
+                self.refresh_history()
+            else:
+                QMessageBox.warning(self, "清除失败", "未能清除历史记录，请稍后重试。")
+        except Exception as e:
+            logger.error(f"清除历史记录失败: {e}")
+            QMessageBox.critical(self, "错误", "清除历史记录时出现问题。")
 
     def on_history_item_selected(self, current, previous):
         """当用户选择一条历史记录时，显示详细信息"""
