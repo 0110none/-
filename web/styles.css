@@ -1,4 +1,10 @@
-/* Reset and Base Styles */
+/* ============================
+   着陆页核心样式：中文注释版本
+   ----------------------------
+   定义了暗色主题、组件布局、按钮风格等。
+   ============================ */
+
+/* Reset and Base Styles / 初始化基础样式 */
 * {
     margin: 0;
     padding: 0;
@@ -36,7 +42,7 @@ body {
     padding: 0 1rem;
 }
 
-/* Header */
+/* Header / 顶部导航区域 */
 .header {
     position: fixed;
     top: 0;
@@ -116,7 +122,7 @@ body {
     cursor: pointer;
 }
 
-/* Buttons */
+/* Buttons / 通用按钮风格 */
 .btn {
     display: inline-flex;
     align-items: center;

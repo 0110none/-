@@ -70,9 +70,11 @@ class HistoryViewer(QWidget):
         }
 
     def update_export_path_label(self):
+        """同步界面上的导出目录标签，确保用户了解最终保存位置"""
         if hasattr(self, 'export_path_label'):
             display_path = str(self.export_dir)
             self.export_path_label.setText(display_path)
+            # 通过 ToolTip 显示完整路径，便于查看长目录
             self.export_path_label.setToolTip(display_path)
 
     def setup_ui(self):
